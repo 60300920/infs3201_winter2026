@@ -1,0 +1,68 @@
+A4 Refactor Plan
+
+1. Colections That Will Change
+
+employees
+
+REMOVE the `employeeId` field (e.g. "E001") from every document.
+-After migration, documents will only contain: _id, name, phone.
+
+shifts
+
+REMOVE the `shiftId` field (e.g. "S001") from every document.
+-ADD a new `employees` array that embeds the ObjectIds of assigned employees.
+-After migration, documents will contain: _id, date, startTime, endTime, employees[].
+
+assignments
+
+-This collection will be DROPPED entirely.
+-Its relationship is now encoded inside shifts.employees[].
+
+
+2. Persistence Functions That Must Be Modified or Removed
+
+To remover:
+
+-findAssignmentsByEmployeeId() — assignments collection is gone.
+-getAssignments() — no longer needed.
+
+To modified:
+-findEmployeeById() — must query by _id (ObjectId) instead of employeeId field.
+-updateEmployee() — must use ObjectId filter.
+-findShiftById() — must query by _id (ObjectId) instead of shiftId field.
+
+To added:
+-getShiftsForEmployee(employeeObjectId) — finds all shifts where employees array contains the given ObjectId.
+
+
+
+3. Required Changes to Business Logic
+
+- getEmployeeById() — persistence layer now converts string id to ObjectId.
+- getEmployeeSchedule() — no longer uses assignments collection.
+  Instead calls persistence.getShiftsForEmployee(ObjectId).
+- addEmployee() — no longer generates E### id; MongoDB _id is used automatically.
+- calculateDailyHours() — updated to use getShiftsForEmployee() instead of assignments.
+
+
+4. How Embedded Arrays Affect Update Operations
+
+- Assigning an employee to a shift = pushing their ObjectId into shifts.employees[] using $addToSet.
+- Removing an assignment = using $pull to remove the ObjectId from the array.
+- Finding an employee's shifts = querying shifts where { employees: employeeObjectId }.
+
+
+5.Risks and Complications
+
+a. ObjectId vs String: _id is a BSON ObjectId, not a plain string.
+-All queries must use: new mongodb.ObjectId(idString)
+-Passing a raw string will silently find nothing.
+
+b. URL params are strings: req.params.id is always a string.
+-Must convert to ObjectId before querying the database.
+
+c. Views use employeeId: All Handlebars templates reference employee.employeeId.
+-These must be updated to use employee._id.
+
+d. Migration is one-way: Once transform_db.js runs and the assignments
+-collection is dropped, the old schema is gone. Back up first.
