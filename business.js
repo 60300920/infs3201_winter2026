@@ -277,6 +277,58 @@ async function destroySession(sessionId) {
     await persistence.deleteSession(sessionId);
 }
 
+/**
+ * Get the number of documents uploaded for an employee.
+ * @param {string} employeeId - string form of ObjectId
+ * @returns {Promise<number>}
+ */
+async function getDocumentCount(employeeId) {
+    try {
+        const docs = await persistence.getDocumentsByEmployee(new ObjectId(employeeId));
+        return docs.length;
+    } catch (e) {
+        return 0;
+    }
+}
+
+/**
+ * Get all documents for an employee.
+ * @param {string} employeeId - string form of ObjectId
+ * @returns {Promise<Array>}
+ */
+async function getEmployeeDocuments(employeeId) {
+    try {
+        return await persistence.getDocumentsByEmployee(new ObjectId(employeeId));
+    } catch (e) {
+        return [];
+    }
+}
+
+/**
+ * Save a document record for an employee.
+ * @param {string} employeeId - string form of ObjectId
+ * @param {string} originalName - original filename
+ * @param {string} storedName - name on disk
+ * @returns {Promise<void>}
+ */
+async function saveDocumentRecord(employeeId, originalName, storedName) {
+    await persistence.saveDocument({
+        employeeId: new ObjectId(employeeId),
+        originalName: originalName,
+        storedName: storedName,
+        uploadDate: new Date()
+    });
+}
+
+/**
+ * Get a document record by its id.
+ * @param {string} docId
+ * @returns {Promise<Object|null>}
+ */
+async function getDocumentById(docId) {
+    return await persistence.findDocumentById(docId);
+}
+
 module.exports = {
     computeShiftDuration,
     getAllEmployees,
@@ -291,5 +343,9 @@ module.exports = {
     validate2FACode,
     createSession,
     getSession,
-    destroySession
+    destroySession,
+    getDocumentCount,
+    getEmployeeDocuments,
+    saveDocumentRecord,
+    getDocumentById
 };
