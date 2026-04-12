@@ -2,6 +2,9 @@
 
 const express = require('express');
 const { engine } = require('express-handlebars');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const business = require('./business');
 const persistence = require('./persistence');
@@ -13,6 +16,34 @@ app.set('view engine', 'handlebars');
 app.set('views', './views');
 
 app.use(express.urlencoded({ extended: false }));
+
+// Create uploads directory if it doesn't exist
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) {
+    fs.mkdirSync(UPLOAD_DIR);
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, UPLOAD_DIR);
+    },
+    filename: function (req, file, cb) {
+        const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + '.pdf';
+        cb(null, uniqueName);
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 2 * 1024 * 1024 },
+    fileFilter: function (req, file, cb) {
+        if (file.mimetype !== 'application/pdf') {
+            return cb(new Error('Only PDF files are allowed.'));
+        }
+        cb(null, true);
+    }
+});
 
 const COOKIE_NAME = 'sessionId';
 
@@ -39,7 +70,7 @@ function parseCookieSessionId(req) {
 }
 
 /**
- * Logs every request to the security_log collection.
+ * Logs every request to the security_logs collection.
  * @param {Object} req
  * @param {Object} res
  * @param {Function} next
@@ -228,7 +259,6 @@ app.get('/employee/:id', async (req, res) => {
         }
     }
 
-
     for (let i = 0; i < schedule.length; i++) {
         const hour = parseInt(schedule[i].startTime.split(':')[0]);
         if (hour < 12) {
@@ -236,7 +266,15 @@ app.get('/employee/:id', async (req, res) => {
         }
     }
 
-    res.render('employee', { employee: employee, schedule: schedule });
+    const documents = await business.getEmployeeDocuments(empId);
+    const docCount = documents.length;
+
+    res.render('employee', {
+        employee: employee,
+        schedule: schedule,
+        documents: documents,
+        canUpload: docCount < 5
+    });
 });
 
 /**
@@ -283,6 +321,73 @@ app.post('/employee/:id/edit', async (req, res) => {
     await persistence.updateEmployee(empId, name, phone);
 
     res.redirect('/');
+});
+
+/**
+ * Upload a document for an employee - POST.
+ * @param {Object} req
+ * @param {Object} res
+ * @returns {Promise<void>}
+ */
+app.post('/employee/:id/upload', function (req, res) {
+    const empId = req.params.id;
+
+    upload.single('document')(req, res, async function (err) {
+        if (err) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                res.send('File must be less than 2MB.');
+                return;
+            }
+            res.send(err.message);
+            return;
+        }
+
+        if (!req.file) {
+            res.send('Please select a file to upload.');
+            return;
+        }
+
+        const employee = await business.getEmployeeById(empId);
+        if (employee === null) {
+            res.send('Employee not found');
+            return;
+        }
+
+        const docCount = await business.getDocumentCount(empId);
+        if (docCount >= 5) {
+            // Remove the uploaded file since we can't save it
+            fs.unlinkSync(req.file.path);
+            res.send('Maximum of 5 documents allowed per employee.');
+            return;
+        }
+
+        await business.saveDocumentRecord(empId, req.file.originalname, req.file.filename);
+
+        res.redirect('/employee/' + empId);
+    });
+});
+
+/**
+ * Download a document - GET.
+ * Protected so only logged-in users can access documents.
+ * @param {Object} req
+ * @param {Object} res
+ * @returns {Promise<void>}
+ */
+app.get('/document/:id', async (req, res) => {
+    const doc = await business.getDocumentById(req.params.id);
+    if (doc === null) {
+        res.send('Document not found');
+        return;
+    }
+
+    const filePath = path.join(UPLOAD_DIR, doc.storedName);
+    if (!fs.existsSync(filePath)) {
+        res.send('File not found on server');
+        return;
+    }
+
+    res.download(filePath, doc.originalName);
 });
 
 /**
