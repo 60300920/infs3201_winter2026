@@ -1,8 +1,9 @@
-'use strict';
+
 
 const { ObjectId } = require('mongodb');
 const persistence = require('./persistence');
 const crypto = require('crypto');
+const emailSystem = require('./emailSystem');
 
 /**
  * Compute the duration of a shift in hours.
@@ -119,22 +120,102 @@ function hashPassword(password) {
 
 /**
  * Validate login credentials against the users collection.
+ * Checks for locked accounts and tracks failed attempts.
  * @param {string} username
  * @param {string} password - plaintext
- * @returns {Promise<Object|null>} user document if valid, null otherwise
+ * @returns {Promise<Object>} { success, user, message }
  */
 async function validateLogin(username, password) {
     const user = await persistence.findUserByUsername(username);
     if (user === null) {
-        return null;
+        return { success: false, user: null, message: 'Invalid username or password' };
+    }
+
+    // Check if account is locked
+    if (user.locked === true) {
+        return { success: false, user: null, message: 'Account is locked. Contact an administrator.' };
     }
 
     const hashed = hashPassword(password);
     if (user.password !== hashed) {
-        return null;
+        // Increment failed attempts
+        await persistence.incrementFailedAttempts(username);
+        const updated = await persistence.findUserByUsername(username);
+        const attempts = updated.failedAttempts || 1;
+
+        // Send warning email after 3 failed attempts
+        if (attempts === 3) {
+            const email = updated.email || username + '@example.com';
+            await emailSystem.sendSuspiciousActivityAlert(email, username);
+        }
+
+        // Lock account after 10 failed attempts
+        if (attempts >= 10) {
+            await persistence.lockAccount(username);
+            const email = updated.email || username + '@example.com';
+            await emailSystem.sendAccountLockedAlert(email, username);
+            return { success: false, user: null, message: 'Account is locked due to too many failed attempts.' };
+        }
+
+        return { success: false, user: null, message: 'Invalid username or password' };
     }
 
-    return user;
+    // Successful password check - reset failed attempts
+    await persistence.resetFailedAttempts(username);
+    return { success: true, user: user, message: null };
+}
+
+
+const TWO_FA_DURATION_MS = 3 * 60 * 1000; // 3 minutes
+
+/**
+ * Generate a random 6-digit 2FA code.
+ * @returns {string}
+ */
+function generate2FACode() {
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+        code += Math.floor(Math.random() * 10).toString();
+    }
+    return code;
+}
+
+/**
+ * Create and send a 2FA code for a user.
+ * @param {string} username
+ * @param {string} email
+ * @returns {Promise<void>}
+ */
+async function create2FACode(username, email) {
+    const code = generate2FACode();
+    const expiry = new Date(Date.now() + TWO_FA_DURATION_MS);
+    await persistence.save2FACode({ username: username, code: code, expiry: expiry });
+    await emailSystem.send2FACode(email, code);
+}
+
+/**
+ * Validate a 2FA code entered by the user.
+ * @param {string} username
+ * @param {string} code
+ * @returns {Promise<boolean>}
+ */
+async function validate2FACode(username, code) {
+    const record = await persistence.find2FACode(username);
+    if (record === null) {
+        return false;
+    }
+
+    if (record.expiry < new Date()) {
+        await persistence.delete2FACode(username);
+        return false;
+    }
+
+    if (record.code !== code) {
+        return false;
+    }
+
+    await persistence.delete2FACode(username);
+    return true;
 }
 
 
@@ -207,6 +288,8 @@ module.exports = {
     calculateDailyHours,
     hashPassword,
     validateLogin,
+    create2FACode,
+    validate2FACode,
     createSession,
     getSession,
     destroySession
