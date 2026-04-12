@@ -159,6 +159,71 @@ async function logSecurityEvent(entry) {
     await db.collection('security_log').insertOne(entry);
 }
 
+/**
+ * Save a 2FA code for a user.
+ * @param {Object} twoFARecord
+ * @returns {Promise<void>}
+ */
+async function save2FACode(twoFARecord) {
+    await db.collection('twofactor').deleteMany({ username: twoFARecord.username });
+    await db.collection('twofactor').insertOne(twoFARecord);
+}
+
+/**
+ * find a 2FA record by username.
+ * @param {string} username
+ * @returns {Promise<Object|null>}
+ */
+async function find2FACode(username) {
+    return await db.collection('twofactor').findOne({ username: username });
+}
+
+/**
+ * delete a 2FA record for a user.
+ * @param {string} username
+ * @returns {Promise<void>}
+ */
+async function delete2FACode(username) {
+    await db.collection('twofactor').deleteMany({ username: username });
+}
+
+/**
+ * Increment the failed login attempts for a user.
+ * @param {string} username
+ * @returns {Promise<void>}
+ */
+async function incrementFailedAttempts(username) {
+    await db.collection('users').updateOne(
+        { username: username },
+        { $inc: { failedAttempts: 1 } }
+    );
+}
+
+/**
+ * Reset the failed login attempts for a user to 0.
+ * @param {string} username
+ * @returns {Promise<void>}
+ */
+async function resetFailedAttempts(username) {
+    await db.collection('users').updateOne(
+        { username: username },
+        { $set: { failedAttempts: 0 } }
+    );
+}
+
+/**
+ * Lock a user account.
+ * @param {string} username
+ * @returns {Promise<void>}
+ */
+async function lockAccount(username) {
+    await db.collection('users').updateOne(
+        { username: username },
+        { $set: { locked: true } }
+    );
+}
+
+
 
 
 module.exports = {
@@ -175,5 +240,11 @@ module.exports = {
     findSession,
     updateSessionExpiry,
     deleteSession,
-    logSecurityEvent
+    logSecurityEvent,
+    save2FACode,
+    find2FACode,
+    delete2FACode,
+    incrementFailedAttempts,
+    resetFailedAttempts,
+    lockAccount
 };
