@@ -1,4 +1,3 @@
-
 const { MongoClient, ObjectId } = require('mongodb');
 const { setServers } = require('node:dns/promises');
 setServers(['1.1.1.1', '8.8.8.8']);
@@ -222,6 +221,37 @@ async function lockAccount(username) {
     );
 }
 
+/**
+ * Save a document record for an employee.
+ * @param {Object} docRecord - { employeeId, originalName, storedName, uploadDate }
+ * @returns {Promise<void>}
+ */
+async function saveDocument(docRecord) {
+    await db.collection('documents').insertOne(docRecord);
+}
+
+/**
+ * Get all documents for an employee.
+ * @param {ObjectId} employeeId
+ * @returns {Promise<Array>}
+ */
+async function getDocumentsByEmployee(employeeId) {
+    return await db.collection('documents').find({ employeeId: employeeId }).toArray();
+}
+
+/**
+ * Find a document by its ObjectId.
+ * @param {string} id
+ * @returns {Promise<Object|null>}
+ */
+async function findDocumentById(id) {
+    try {
+        return await db.collection('documents').findOne({ _id: new ObjectId(id) });
+    } catch (e) {
+        return null;
+    }
+}
+
 module.exports = {
     connect,
     getEmployees,
@@ -242,5 +272,8 @@ module.exports = {
     delete2FACode,
     incrementFailedAttempts,
     resetFailedAttempts,
-    lockAccount
+    lockAccount,
+    saveDocument,
+    getDocumentsByEmployee,
+    findDocumentById
 };
