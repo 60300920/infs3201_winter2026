@@ -18,5 +18,29 @@
     {{/each}}
 </table>
 
+<h2>Documents</h2>
+{{#if documents.length}}
+<ul>
+    {{#each documents}}
+    <li>
+        <a href="/document/{{this._id}}">{{this.originalName}}</a>
+    </li>
+    {{/each}}
+</ul>
+{{else}}
+<p>No documents uploaded.</p>
+{{/if}}
+
+{{#if canUpload}}
+<h3>Upload Document</h3>
+<p>PDF only, max 2MB, up to 5 documents per employee.</p>
+<form action="/employee/{{employee._id}}/upload" method="POST" enctype="multipart/form-data">
+    <input type="file" name="document" accept=".pdf"><br><br>
+    <button type="submit">Upload</button>
+</form>
+{{else}}
+<p>Maximum number of documents reached (5).</p>
+{{/if}}
+
 <br>
 <a href="/">Back to Employees</a>
