@@ -73,7 +73,7 @@ app.use(async (req, res, next) => {
 
 
 /**
- * Blocks access to all routes except /login and /logout if no valid session.
+ * Blocks access to all routes except /login, /logout, and /verify-2fa if no valid session.
  * Redirects unauthenticated users to /login.
  * @param {Object} req
  * @param {Object} res
@@ -81,7 +81,7 @@ app.use(async (req, res, next) => {
  * @returns {Promise<void>}
  */
 async function requireAuth(req, res, next) {
-    if (req.path === '/login' || req.path === '/logout') {
+    if (req.path === '/login' || req.path === '/logout' || req.path === '/verify-2fa') {
         return next();
     }
 
@@ -110,6 +110,7 @@ app.get('/login', (req, res) => {
 
 /**
  * Login - POST.
+ * Validates credentials then redirects to 2FA page.
  * @param {Object} req
  * @param {Object} res
  * @returns {Promise<void>}
@@ -118,12 +119,41 @@ app.post('/login', async (req, res) => {
     const username = (req.body.username || '').trim();
     const password = (req.body.password || '').trim();
 
-    const user = await business.validateLogin(username, password);
+    const result = await business.validateLogin(username, password);
 
-    if (user === null) {
-        return res.redirect('/login?message=Invalid+username+or+password');
+    if (result.success === false) {
+        return res.redirect('/login?message=' + encodeURIComponent(result.message));
     }
 
+    // Send 2FA code to user's email
+    const email = result.user.email || username + '@example.com';
+    await business.create2FACode(username, email);
+
+    res.render('twofa', { username: username, message: null });
+});
+
+/**
+ * 2FA verification - POST.
+ * Validates the 2FA code and creates session if correct.
+ * @param {Object} req
+ * @param {Object} res
+ * @returns {Promise<void>}
+ */
+app.post('/verify-2fa', async (req, res) => {
+    const username = (req.body.username || '').trim();
+    const code = (req.body.code || '').trim();
+
+    if (username === '' || code === '') {
+        return res.render('twofa', { username: username, message: 'Please enter your verification code.' });
+    }
+
+    const valid = await business.validate2FACode(username, code);
+
+    if (valid === false) {
+        return res.render('twofa', { username: username, message: 'Invalid or expired code. Please try again.' });
+    }
+
+    // Code is valid - create session
     const sessionId = await business.createSession(username);
 
     res.setHeader(
