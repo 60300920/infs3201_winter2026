@@ -1,4 +1,3 @@
-'use strict';
 
 const { MongoClient, ObjectId } = require('mongodb');
 const { setServers } = require('node:dns/promises');

@@ -1,0 +1,12 @@
+{{#if message}}
+<p class="message">{{message}}</p>
+{{/if}}
+
+<h1>Two-Factor Authentication</h1>
+<p>A 6-digit verification code has been sent to your email. Please enter it below.</p>
+<form action="/verify-2fa" method="POST">
+    <input type="hidden" name="username" value="{{username}}">
+    <label>Verification Code:</label><br>
+    <input type="text" name="code" maxlength="6" placeholder="000000" autocomplete="one-time-code"><br><br>
+    <button type="submit">Verify</button>
+</form>
