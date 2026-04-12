@@ -1,5 +1,4 @@
 
-
 const { ObjectId } = require('mongodb');
 const persistence = require('./persistence');
 const crypto = require('crypto');
@@ -132,7 +131,7 @@ async function validateLogin(username, password) {
     }
 
     // Check if account is locked
-    if (user.locked === true) {
+    if (user.accountLocked === true) {
         return { success: false, user: null, message: 'Account is locked. Contact an administrator.' };
     }
 
@@ -141,7 +140,7 @@ async function validateLogin(username, password) {
         // Increment failed attempts
         await persistence.incrementFailedAttempts(username);
         const updated = await persistence.findUserByUsername(username);
-        const attempts = updated.failedAttempts || 1;
+        const attempts = updated.failedLoginAttempts || 1;
 
         // Send warning email after 3 failed attempts
         if (attempts === 3) {

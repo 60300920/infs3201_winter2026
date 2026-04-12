@@ -3,7 +3,7 @@ const { MongoClient, ObjectId } = require('mongodb');
 const { setServers } = require('node:dns/promises');
 setServers(['1.1.1.1', '8.8.8.8']);
 
-const DB_NAME = 'infs3201_winter2026';
+const DB_NAME = 'Assignment5';
 
 let db;
 let client;
@@ -14,7 +14,7 @@ let client;
  */
 async function connect() {
     const uri = process.env.MONGODB_URI ||
-        'mongodb+srv://60300920:Ihavealandcruiser2011@cluster0.uynfqk5.mongodb.net/?appName=Cluster0';
+        'mongodb+srv://60300920_db:carrot123@cluster0.o4fp7et.mongodb.net/?appName=Cluster0';
     client = new MongoClient(uri);
     await client.connect();
     db = client.db(DB_NAME);
@@ -155,12 +155,12 @@ async function deleteSession(sessionId) {
  * @returns {Promise<void>}
  */
 async function logSecurityEvent(entry) {
-    await db.collection('security_log').insertOne(entry);
+    await db.collection('security_logs').insertOne(entry);
 }
 
 /**
  * Save a 2FA code for a user.
- * @param {Object} twoFARecord
+ * @param {Object} twoFARecord - { username, code, expiry }
  * @returns {Promise<void>}
  */
 async function save2FACode(twoFARecord) {
@@ -169,7 +169,7 @@ async function save2FACode(twoFARecord) {
 }
 
 /**
- * find a 2FA record by username.
+ * Find a 2FA record by username.
  * @param {string} username
  * @returns {Promise<Object|null>}
  */
@@ -178,7 +178,7 @@ async function find2FACode(username) {
 }
 
 /**
- * delete a 2FA record for a user.
+ * Delete a 2FA record for a user.
  * @param {string} username
  * @returns {Promise<void>}
  */
@@ -194,7 +194,7 @@ async function delete2FACode(username) {
 async function incrementFailedAttempts(username) {
     await db.collection('users').updateOne(
         { username: username },
-        { $inc: { failedAttempts: 1 } }
+        { $inc: { failedLoginAttempts: 1 } }
     );
 }
 
@@ -206,7 +206,7 @@ async function incrementFailedAttempts(username) {
 async function resetFailedAttempts(username) {
     await db.collection('users').updateOne(
         { username: username },
-        { $set: { failedAttempts: 0 } }
+        { $set: { failedLoginAttempts: 0 } }
     );
 }
 
@@ -218,12 +218,9 @@ async function resetFailedAttempts(username) {
 async function lockAccount(username) {
     await db.collection('users').updateOne(
         { username: username },
-        { $set: { locked: true } }
+        { $set: { accountLocked: true } }
     );
 }
-
-
-
 
 module.exports = {
     connect,
